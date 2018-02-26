@@ -33,6 +33,7 @@ public class SolverController
 
 	@FXML private Slider slider;
 	@FXML private Slider slider2;
+	@FXML private Slider slider3;
 
 	Point clickedPoint = new Point(0, 0);
 	Mat oldFrame;
@@ -58,7 +59,7 @@ public class SolverController
 		this.updateImageView(this.puzzleImage, Utils.mat2Image(this.puzzle));
 
 		//load piece image
-		String piecePath = "D:\\Code and load\\workspace_new\\PuzzleSolver\\images\\resized\\p2_red.jpg";;
+		String piecePath = "D:\\Code and load\\workspace_new\\PuzzleSolver\\images\\resized2\\p2_red.jpg";
 		this.piece = Imgcodecs.imread(piecePath , Imgcodecs.CV_LOAD_IMAGE_UNCHANGED);
 //		Imgproc.resize(this.piece, this.piece, new Size(this.piece.height() / 2, this.piece.width() / 2));
 		this.pieceGray = Imgcodecs.imread(piecePath , Imgcodecs.CV_LOAD_IMAGE_GRAYSCALE);
@@ -69,47 +70,116 @@ public class SolverController
 
 		this.slider.valueProperty().addListener(new ChangeListener<Number>() {
             public void changed(ObservableValue<? extends Number> ov, Number old_val, Number new_val) {
-//            	Mat detected = doBackgroundRemoval(new_val.doubleValue(), slider2.getValue());
-//            	Mat detected = doCanny(new_val.doubleValue());
-//            	Mat detected = doSobel(new_val.doubleValue(), slider2.getValue());
-            	Mat detected = doContours(new_val.doubleValue());
-
-            	updateImageView(detectImage, Utils.mat2Image(detected));
+            	edgeDetection();
             }
         });
 
 		this.slider2.valueProperty().addListener(new ChangeListener<Number>() {
             public void changed(ObservableValue<? extends Number> ov, Number old_val, Number new_val) {
-//            	Mat detected = doBackgroundRemoval(slider.getValue(), new_val.doubleValue());
-//            	Mat detected = doCanny(new_val.doubleValue());
-            	Mat detected = doSobel(slider.getValue(), new_val.doubleValue());
-
-            	updateImageView(detectImage, Utils.mat2Image(detected));
+            	edgeDetection();
             }
         });
+		
+		this.slider3.valueProperty().addListener(new ChangeListener<Number>() {
+            public void changed(ObservableValue<? extends Number> ov, Number old_val, Number new_val) {
+            	edgeDetection();
+            }
+        });
+		
+		this.pieceImage.setOnMouseClicked(e -> {
+			System.out.println("[" + e.getX() + ", " + e.getY() + "]");
+			clickedPoint.x = e.getX();
+			clickedPoint.y = e.getY();
+			edgeDetection();
+		});
+		
+		edgeDetection();
 	}
-
-	private Mat doBackgroundRemovalAbsDiff(Mat currFrame)
+	
+	private void edgeDetection() {
+		double val1 = this.slider.getValue();
+		double val2 = this.slider2.getValue();
+		double val3 = this.slider3.getValue();
+		
+//		System.out.println(val1+" "+val2+" "+val3);
+		
+		Mat detected = doBackgroundRemoval(val1, val2, val3, this.clickedPoint);
+//    	Mat detected = doCanny(new_val.doubleValue());
+//    	Mat detected = doSobel(slider.getValue(), new_val.doubleValue());
+//    	Mat detected = doContours(new_val.doubleValue());
+		
+		updateImageView(detectImage, Utils.mat2Image(detected));
+	}
+	
+	private Mat doContours(Double thresholdX)
 	{
-		Mat greyImage = new Mat();
-		Mat foregroundImage = new Mat();
+		Mat contours = new Mat();
+		List<Mat> hsvPlanes = new ArrayList<>();
 
-		if (oldFrame == null)
-			oldFrame = currFrame;
+//		Imgproc.findContours(this.piece, contours, null, mode, method);
 
-		Core.absdiff(currFrame, oldFrame, foregroundImage);
-		Imgproc.cvtColor(foregroundImage, greyImage, Imgproc.COLOR_BGR2GRAY);
 
-		int thresh_type = Imgproc.THRESH_BINARY_INV;
-//		if (this.inverse.isSelected())
-//			thresh_type = Imgproc.THRESH_BINARY;
 
-		Imgproc.threshold(greyImage, greyImage, 10, 255, thresh_type);
-		currFrame.copyTo(foregroundImage, greyImage);
 
-		oldFrame = currFrame;
-		return foregroundImage;
 
+		return contours;
+	}
+	
+	
+	
+	/* other edge detection/background removal functions below */
+	
+	
+	//github.com/tanaka0079/java/blob/master/opencv/image/Grabcut.java
+	//docs.opencv.org/trunk/d8/d83/tutorial_py_grabcut.html
+	private Mat doBackgroundRemoval(Double threshold, Double threshold2, Double threshold3, Point clickedPoint)
+	{
+		Mat hsvImg = new Mat();
+		List<Mat> hsvPlanes = new ArrayList<>();
+		Mat thresholdImg = new Mat();
+//		Mat gcImg = new Mat();
+		Mat mask = new Mat(this.piece.size(), Imgproc.GC_BGD, new Scalar(255, 255, 255));
+		
+		Mat source = new Mat(1, 1, CvType.CV_8U, new Scalar(3)); //dummy matrix to compare with
+		
+//		TODO: grabcut!
+		Mat img = this.piece;
+		Imgproc.grabCut(img, mask, new Rect(220, 120, 400, 400), new Mat(), new Mat(), 4, Imgproc.GC_INIT_WITH_RECT);
+		Core.compare(mask, source, mask, Core.CMP_EQ);
+		
+		Mat fg = new Mat(img.size(), CvType.CV_8UC1, new Scalar(0, 0, 0));
+		img.copyTo(fg, mask);
+		
+		return fg;
+
+		/*
+//		int thresh_type = Imgproc.THRESH_BINARY_INV;
+		int thresh_type = Imgproc.THRESH_BINARY;
+
+		// threshold the image with the average hue value
+		hsvImg.create(this.piece.size(), CvType.CV_8U);
+		Imgproc.cvtColor(this.piece, hsvImg, Imgproc.COLOR_BGR2HSV);
+		Core.split(hsvImg, hsvPlanes);
+
+		// get the average hue value of the image
+		double threshValue = this.getHistAverage(hsvImg, hsvPlanes.get(0));
+
+		Imgproc.threshold(hsvPlanes.get(0), thresholdImg, threshValue, 179.0, thresh_type);
+
+		Imgproc.blur(thresholdImg, thresholdImg, new Size(threshold, threshold));
+
+		// dilate to fill gaps, erode to smooth edges
+		Imgproc.dilate(thresholdImg, thresholdImg, new Mat(), clickedPoint, (int) (threshold2 / 10));
+		Imgproc.erode(thresholdImg, thresholdImg, new Mat(), clickedPoint, (int) (threshold2 * 3 / 10));
+
+//		Imgproc.threshold(thresholdImg, thresholdImg, threshold3, 179.0, Imgproc.THRESH_BINARY);
+
+		// create the new image
+		Mat foreground = new Mat(this.piece.size(), CvType.CV_8UC3, new Scalar(255, 255, 255));
+		this.piece.copyTo(foreground, thresholdImg);
+
+		return foreground;
+		*/
 	}
 
 	private Mat doBackgroundRemovalFloodFill(Mat frame)
@@ -129,49 +199,6 @@ public class SolverController
 	}
 
 	/**
-	 * Perform the operations needed for removing a uniform background
-	 *
-	 * @param frame
-	 *            the current frame
-	 * @return an image with only foreground objects
-	 */
-	private Mat doBackgroundRemoval(Double threshold, Double threshold2)
-	{
-		// init
-		Mat hsvImg = new Mat();
-		List<Mat> hsvPlanes = new ArrayList<>();
-		Mat thresholdImg = new Mat();
-
-		int thresh_type = Imgproc.THRESH_BINARY_INV;
-//		if (this.inverse.isSelected())
-//			thresh_type = Imgproc.THRESH_BINARY;
-
-		// threshold the image with the average hue value
-		hsvImg.create(this.piece.size(), CvType.CV_8U);
-		Imgproc.cvtColor(this.piece, hsvImg, Imgproc.COLOR_BGR2HSV);
-		Core.split(hsvImg, hsvPlanes);
-
-		// get the average hue value of the image
-		double threshValue = this.getHistAverage(hsvImg, hsvPlanes.get(0));
-
-		Imgproc.threshold(hsvPlanes.get(0), thresholdImg, threshValue, 179.0, thresh_type);
-
-		Imgproc.blur(thresholdImg, thresholdImg, new Size(threshold*10, threshold*10));
-
-		// dilate to fill gaps, erode to smooth edges
-		Imgproc.dilate(thresholdImg, thresholdImg, new Mat(), new Point(-1, -1), (int) (threshold2 / 10));
-		Imgproc.erode(thresholdImg, thresholdImg, new Mat(), new Point(-1, -1), (int) (threshold2 * 3 / 10));
-
-		Imgproc.threshold(thresholdImg, thresholdImg, threshValue, 179.0, Imgproc.THRESH_BINARY);
-
-		// create the new image
-		Mat foreground = new Mat(this.piece.size(), CvType.CV_8UC3, new Scalar(255, 255, 255));
-		this.piece.copyTo(foreground, thresholdImg);
-
-		return foreground;
-	}
-
-	/**
 	 * Get the average hue value of the image starting from its Hue channel
 	 * histogram
 	 *
@@ -183,7 +210,6 @@ public class SolverController
 	 */
 	private double getHistAverage(Mat hsvImg, Mat hueValues)
 	{
-		// init
 		double average = 0.0;
 		Mat hist_hue = new Mat();
 		// 0-180: range of Hue values
@@ -210,13 +236,6 @@ public class SolverController
 		return average = average / hsvImg.size().height / hsvImg.size().width;
 	}
 
-	/**
-	 * Apply Canny
-	 *
-	 * @param frame
-	 *            the current frame
-	 * @return an image elaborated with Canny
-	 */
 	private Mat doCanny(Double threshold)
 	{
 		// init
@@ -239,13 +258,6 @@ public class SolverController
 		return dest;
 	}
 
-	/**
-	 * Apply Sobel
-	 *
-	 * @param frame
-	 *            the current frame
-	 * @return an image elaborated with Sobel derivation
-	 */
 	private Mat doSobel(Double thresholdX, Double thresholdY)
 	{
 		// init
@@ -284,28 +296,6 @@ public class SolverController
 		return detectedEdges;
 	}
 
-	/**
-	 * Apply Sobel
-	 *
-	 * @param frame
-	 *            the current frame
-	 * @return an image elaborated with Sobel derivation
-	 */
-	private Mat doContours(Double thresholdX)
-	{
-		Mat detectedEdges = new Mat();
-		List<Mat> hsvPlanes = new ArrayList<>();
-
-		Imgproc.cvtColor(this.piece, detectedEdges, Imgproc.COLOR_BGR2HSV);
-
-		Core.split(detectedEdges, hsvPlanes);
-
-
-
-
-
-		return detectedEdges;
-	}
 
 	/**
 	 * Update the {@link ImageView} in the JavaFX main thread

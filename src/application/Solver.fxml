@@ -35,6 +35,7 @@
       <children>
         <Slider fx:id="slider" min="0.0" minHeight="-1.0" minWidth="-1.0" showTickLabels="true" showTickMarks="true" value="25.0" />
         <Slider fx:id="slider2" showTickLabels="true" showTickMarks="true" value="25.0" />
+        <Slider fx:id="slider3" showTickLabels="true" showTickMarks="true" value="25.0" />
       </children>
     </HBox>
   </top>
